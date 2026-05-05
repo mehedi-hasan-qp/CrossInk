@@ -226,6 +226,31 @@ done
 
 python fontconvert.py inter_8_regular 8 ../builtinFonts/source/Inter/Inter-Regular.ttf > ../builtinFonts/inter_8_regular.h
 
+# Noto Sans Bengali — Bangla script (U+0980–U+09FF)
+# Regular only; sizes 10–20. Uses the .font-tools-venv for uharfbuzz/freetype-py deps.
+# --bangla pre-shapes conjuncts via HarfBuzz into PUA glyphs (U+E000+).
+# --bangla-clusters-out emits lib/BanglaShaper/bangla_clusters.h (sequence → PUA table).
+
+BENGALI_FONT="../builtinFonts/source/NotoSansBengali/NotoSansBengali-Regular.ttf"
+BENGALI_SIZES=(10 12 14 16 18 20)
+BENGALI_RENDER_ARGS=(--2bit --compress --darken-aa)
+BENGALI_CLUSTERS_OUT="../../../lib/BanglaShaper/bangla_clusters.h"
+
+echo "Generating Noto Bengali fonts..."
+for size in ${BENGALI_SIZES[@]}; do
+  font_name="notobengali_${size}_regular"
+  output_path="../builtinFonts/${font_name}.h"
+  ../../../.font-tools-venv/bin/python3 fontconvert.py "$font_name" "$size" "$BENGALI_FONT" \
+    --additional-intervals 0x0980,0x09FF \
+    --bangla \
+    --bangla-clusters-out "$BENGALI_CLUSTERS_OUT" \
+    "${BENGALI_RENDER_ARGS[@]}" > "$output_path"
+  echo "Generated $output_path"
+done
+echo ""
+echo "Noto Bengali fonts complete."
+echo ""
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/

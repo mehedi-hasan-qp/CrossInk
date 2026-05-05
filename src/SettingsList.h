@@ -45,6 +45,9 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                               StrId::STR_LEXEND_DECA,
                               StrId::STR_BITTER,
                               StrId::STR_CHAREINK,
+#ifndef OMIT_BANGLA_FONT
+                              StrId::STR_NOTO_BENGALI,
+#endif
                           },
                           "fontFamily", StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,

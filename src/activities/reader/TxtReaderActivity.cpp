@@ -1,5 +1,6 @@
 #include "TxtReaderActivity.h"
 
+#include <BanglaShaper.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -37,6 +38,13 @@ size_t parseAndWrapLines(const uint8_t* buffer, size_t chunkSize, size_t fileOff
     bool hasCR = (lineContentLen > 0 && buffer[pos + lineContentLen - 1] == '\r');
     size_t displayLen = hasCR ? lineContentLen - 1 : lineContentLen;
     std::string line(reinterpret_cast<const char*>(buffer + pos), displayLen);
+
+    if (BanglaShaper::containsBangla(line.c_str())) {
+      std::vector<char> shaped(line.size() * 3 + 1);
+      size_t outLen = BanglaShaper::shape(line.c_str(), line.size(), shaped.data(), shaped.size());
+      line.assign(shaped.data(), outLen);
+    }
+
     size_t lineBytePos = 0;
 
     while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {

@@ -1,5 +1,6 @@
 #include "ParsedText.h"
 
+#include <BanglaShaper.h>
 #include <GfxRenderer.h>
 #include <Utf8.h>
 
@@ -110,6 +111,14 @@ bool isWordCharacter(uint32_t cp) {
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious) {
   if (word.empty()) return;
+
+  if (BanglaShaper::containsBangla(word.c_str())) {
+    size_t inLen = word.size();
+    size_t outMax = inLen * 3 + 1;
+    char shapedBuf[outMax];
+    size_t outLen = BanglaShaper::shape(word.c_str(), inLen, shapedBuf, outMax);
+    word.assign(shapedBuf, outLen);
+  }
 
   EpdFontFamily::Style baseStyle = fontStyle;
   if (underline) {

@@ -1,0 +1,2 @@
+# Exclude Python virtual environments (font build tools)
+.font-tools-venv

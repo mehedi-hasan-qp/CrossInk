@@ -102,7 +102,7 @@ class CrossPointSettings {
   };
 
   // Font family options
-  enum FONT_FAMILY { LEXENDDECA = 0, BITTER = 1, CHAREINK = 2, FONT_FAMILY_COUNT };
+  enum FONT_FAMILY { LEXENDDECA = 0, BITTER = 1, CHAREINK = 2, NOTOBENGALI = 3, FONT_FAMILY_COUNT };
   // Font size options
   enum FONT_SIZE {
     TINY = 0,
@@ -242,7 +242,7 @@ class CrossPointSettings {
   uint8_t readerFrontButtonLeft = FRONT_HW_LEFT;
   uint8_t readerFrontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
-  uint8_t fontFamily = LEXENDDECA;
+  uint8_t fontFamily = NOTOBENGALI;
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;

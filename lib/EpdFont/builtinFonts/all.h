@@ -140,6 +140,22 @@
 
 #undef BUILTIN_READING_FONT_HEADER
 
+// Noto Sans Bengali — Bangla script font (U+0980–U+09FF).
+// Regular style only; no emoji/PHM variants needed.
+// Guarded by OMIT_BANGLA_FONT so size-constrained builds (env:tiny) can exclude it.
+#ifndef OMIT_BANGLA_FONT
+#include <builtinFonts/notobengali_10_regular.h>
+#include <builtinFonts/notobengali_12_regular.h>
+#include <builtinFonts/notobengali_14_regular.h>
+#include <builtinFonts/notobengali_16_regular.h>
+#ifndef OMIT_XLARGE_FONT
+#include <builtinFonts/notobengali_18_regular.h>
+#endif
+#ifndef OMIT_HUGE_FONT
+#include <builtinFonts/notobengali_20_regular.h>
+#endif
+#endif
+
 // UI fonts - no emoji or PHM variants.
 #include <builtinFonts/inter_10_bold.h>
 #include <builtinFonts/inter_10_regular.h>

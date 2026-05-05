@@ -50,6 +50,14 @@ echo "#define NOTOSYMBOLS_12_FONT_ID ($(hash_files ./notosymbols_12_regular.h))"
 echo "#define NOTOSYMBOLS_14_FONT_ID ($(hash_files ./notosymbols_14_regular.h))"
 echo "#define NOTOSYMBOLS_16_FONT_ID ($(hash_files ./notosymbols_16_regular.h))"
 
+# Noto Bengali — standalone, no emoji/noemoji variants
+echo "#define NOTOBENGALI_10_FONT_ID ($(hash_files ./notobengali_10_regular.h))"
+echo "#define NOTOBENGALI_12_FONT_ID ($(hash_files ./notobengali_12_regular.h))"
+echo "#define NOTOBENGALI_14_FONT_ID ($(hash_files ./notobengali_14_regular.h))"
+echo "#define NOTOBENGALI_16_FONT_ID ($(hash_files ./notobengali_16_regular.h))"
+echo "#define NOTOBENGALI_18_FONT_ID ($(hash_files ./notobengali_18_regular.h))"
+echo "#define NOTOBENGALI_20_FONT_ID ($(hash_files ./notobengali_20_regular.h))"
+
 # Reading fonts - support OMIT_EMOJI_FONTS
 reading_font_id LEXENDDECA_8_FONT_ID \
   ./lexenddeca_8_regular.h ./lexenddeca_8_bold.h ./lexenddeca_8_bolditalic.h ./lexenddeca_8_italic.h

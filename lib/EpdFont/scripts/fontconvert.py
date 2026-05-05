@@ -21,6 +21,13 @@ parser.add_argument("--compress", dest="compress", action="store_true", help="Co
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 parser.add_argument("--darken-aa", dest="darken_aa", action="store_true", help="Use darker 2-bit anti-aliasing thresholds for reader fonts.")
+parser.add_argument("--bangla", dest="bangla", action="store_true",
+                    help="Enable Bangla complex script support. Uses uharfbuzz to shape conjunct "
+                         "consonants (C + ্ + C) into pre-rendered PUA (U+E000+) glyphs. "
+                         "Also emit a bangla_clusters.h companion file (see --bangla-clusters-out).")
+parser.add_argument("--bangla-clusters-out", dest="bangla_clusters_out", default=None,
+                    help="Path to write the bangla_clusters.h companion header (sequence → PUA table). "
+                         "Only written when --bangla is active.")
 args = parser.parse_args()
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
@@ -390,6 +397,322 @@ for i_start, i_end in intervals:
         )
         total_size += len(packed)
         all_glyphs.append((glyph, packed))
+
+# --- Bangla complex script shaping (--bangla) ---
+# Uses uharfbuzz to render conjunct consonants (C + ্ + C) that cannot be
+# expressed as individual codepoints. Each unique shaped glyph is assigned a
+# Private Use Area codepoint (U+E000+) and appended to all_glyphs. A companion
+# bangla_clusters.h file is written mapping input sequences to PUA codepoints.
+#
+# Pre-base matra reordering (ি U+09BF, ে U+09C7) does NOT require new glyphs —
+# they are the same bitmaps as the individual vowel-sign codepoints. The runtime
+# BanglaShaper handles the reordering by swapping output order, using U+09BF/09C7
+# glyphs that already exist in the base Bangla codepoint range.
+
+bangla_cluster_entries = []  # list of ((c1, c2, c3_or_0), pua_cp)
+
+if args.bangla:
+    import uharfbuzz as hb
+
+    def _render_ft_glyph_index(ft_face, ft_glyph_idx, code_point_label):
+        """Render a FreeType glyph by index (not codepoint) and return (GlyphProps, packed_bytes)."""
+        global total_size
+        ft_face.load_glyph(ft_glyph_idx, load_flags)
+        bm = ft_face.glyph.bitmap
+
+        pixels4g = []
+        px = 0
+        for i, v in enumerate(bm.buffer):
+            x = i % bm.width
+            if x % 2 == 0:
+                px = (v >> 4)
+            else:
+                px = px | (v & 0xF0)
+                pixels4g.append(px)
+                px = 0
+            if x == bm.width - 1 and bm.width % 2 > 0:
+                pixels4g.append(px)
+                px = 0
+
+        if is2Bit:
+            pixels2b = []
+            px = 0
+            pitch = (bm.width // 2) + (bm.width % 2)
+            for y in range(bm.rows):
+                for x in range(bm.width):
+                    px = px << 2
+                    val = pixels4g[y * pitch + (x // 2)]
+                    val = (val >> ((x % 2) * 4)) & 0xF
+                    if val >= aa_thresholds[2]:
+                        px += 3
+                    elif val >= aa_thresholds[1]:
+                        px += 2
+                    elif val >= aa_thresholds[0]:
+                        px += 1
+                    if (y * bm.width + x) % 4 == 3:
+                        pixels2b.append(px)
+                        px = 0
+            if (bm.width * bm.rows) % 4 != 0:
+                px = px << (4 - (bm.width * bm.rows) % 4) * 2
+                pixels2b.append(px)
+            pixels = pixels2b
+        else:
+            pixelsbw = []
+            px = 0
+            pitch = (bm.width // 2) + (bm.width % 2)
+            for y in range(bm.rows):
+                for x in range(bm.width):
+                    px = px << 1
+                    val = pixels4g[y * pitch + (x // 2)]
+                    px += 1 if ((x & 1) == 0 and val & 0xE > 0) or ((x & 1) == 1 and val & 0xE0 > 0) else 0
+                    if (y * bm.width + x) % 8 == 7:
+                        pixelsbw.append(px)
+                        px = 0
+            if (bm.width * bm.rows) % 8 != 0:
+                px = px << (8 - (bm.width * bm.rows) % 8)
+                pixelsbw.append(px)
+            pixels = pixelsbw
+
+        packed = bytes(pixels)
+        g = GlyphProps(
+            width=bm.width,
+            height=bm.rows,
+            advance_x=fp4_from_ft16_16(ft_face.glyph.linearHoriAdvance),
+            left=ft_face.glyph.bitmap_left,
+            top=ft_face.glyph.bitmap_top,
+            data_length=len(packed),
+            data_offset=total_size,
+            code_point=code_point_label,
+        )
+        total_size += len(packed)
+        return g, packed
+
+    # Load HarfBuzz from the primary (first) font file.
+    with open(args.fontstack[0], "rb") as _f:
+        _hb_data = _f.read()
+    _hb_blob = hb.Blob(_hb_data)
+    _hb_face = hb.Face(_hb_blob)
+    _hb_font = hb.Font(_hb_face)
+    # Set scale to match FreeType's 150 DPI rendering (size * 150/72 actual pixels),
+    # expressed in 26.6 fixed-point so glyph_positions are in 1/64-pixel units.
+    _hb_px = round(args.size * 150 / 72 * 64)
+    _hb_font.scale = (_hb_px, _hb_px)
+
+    def _hb_shape(cps):
+        buf = hb.Buffer()
+        buf.add_codepoints(cps)
+        buf.guess_segment_properties()
+        hb.shape(_hb_font, buf)
+        return [info.codepoint for info in buf.glyph_infos]
+
+    def _hb_shape_full(cps):
+        buf = hb.Buffer()
+        buf.add_codepoints(cps)
+        buf.guess_segment_properties()
+        hb.shape(_hb_font, buf)
+        return (
+            [info.codepoint for info in buf.glyph_infos],
+            buf.glyph_positions,
+        )
+
+    def _render_composite_glyphs(ft_face, glyph_ids, positions, pua_cp):
+        """Composite multiple HarfBuzz mark-positioned glyphs into one PUA bitmap."""
+        global total_size
+        gdata = []
+        pen_26_6 = 0  # pen in 26.6 units
+        for gid, pos in zip(glyph_ids, positions):
+            x_off_px = pos.x_offset >> 6
+            y_off_px = pos.y_offset >> 6
+            pen_px = pen_26_6 >> 6
+            ft_face.load_glyph(gid, load_flags)
+            bm = ft_face.glyph
+            gdata.append({
+                'buf': list(bm.bitmap.buffer),
+                'w': bm.bitmap.width,
+                'h': bm.bitmap.rows,
+                'gx': pen_px + bm.bitmap_left + x_off_px,
+                'gy': bm.bitmap_top + y_off_px,
+            })
+            pen_26_6 += pos.x_advance
+
+        active = [g for g in gdata if g['w'] > 0 and g['h'] > 0]
+        if not active:
+            return None, None
+
+        comp_left = min(g['gx'] for g in active)
+        comp_right = max(g['gx'] + g['w'] for g in active)
+        comp_top = max(g['gy'] for g in active)
+        comp_bot = min(g['gy'] - g['h'] for g in active)
+        comp_w = max(1, comp_right - comp_left)
+        comp_h = max(1, comp_top - comp_bot)
+
+        buf8 = [0] * (comp_w * comp_h)
+        for g in active:
+            bx = g['gx'] - comp_left
+            by = comp_top - g['gy']
+            for row in range(g['h']):
+                for col in range(g['w']):
+                    cx, cy = bx + col, by + row
+                    if 0 <= cx < comp_w and 0 <= cy < comp_h:
+                        src = g['buf'][row * g['w'] + col]
+                        idx = cy * comp_w + cx
+                        buf8[idx] = max(buf8[idx], src)
+
+        pixels4g = []
+        px = 0
+        for i, v in enumerate(buf8):
+            x = i % comp_w
+            if x % 2 == 0:
+                px = v >> 4
+            else:
+                px = px | (v & 0xF0)
+                pixels4g.append(px)
+                px = 0
+            if x == comp_w - 1 and comp_w % 2 > 0:
+                pixels4g.append(px)
+                px = 0
+
+        if is2Bit:
+            pixels2b = []
+            px = 0
+            pitch = (comp_w // 2) + (comp_w % 2)
+            for y in range(comp_h):
+                for x in range(comp_w):
+                    px = px << 2
+                    val = pixels4g[y * pitch + (x // 2)]
+                    val = (val >> ((x % 2) * 4)) & 0xF
+                    if val >= aa_thresholds[2]:
+                        px += 3
+                    elif val >= aa_thresholds[1]:
+                        px += 2
+                    elif val >= aa_thresholds[0]:
+                        px += 1
+                    if (y * comp_w + x) % 4 == 3:
+                        pixels2b.append(px)
+                        px = 0
+            if (comp_w * comp_h) % 4 != 0:
+                px = px << (4 - (comp_w * comp_h) % 4) * 2
+                pixels2b.append(px)
+            pixels = pixels2b
+        else:
+            pixelsbw = []
+            px = 0
+            pitch = (comp_w // 2) + (comp_w % 2)
+            for y in range(comp_h):
+                for x in range(comp_w):
+                    px = px << 1
+                    val = pixels4g[y * pitch + (x // 2)]
+                    px += 1 if ((x & 1) == 0 and val & 0xE > 0) or ((x & 1) == 1 and val & 0xE0 > 0) else 0
+                    if (y * comp_w + x) % 8 == 7:
+                        pixelsbw.append(px)
+                        px = 0
+            if (comp_w * comp_h) % 8 != 0:
+                px = px << (8 - (comp_w * comp_h) % 8)
+                pixelsbw.append(px)
+            pixels = pixelsbw
+
+        packed = bytes(pixels)
+        # Ensure advance covers the visual right edge of the composite.
+        # For mark-positioned glyphs (e.g. ya-phala), HarfBuzz sets x_advance=0 on
+        # the mark, so pen_26_6 may be less than the bitmap's actual right extent.
+        visual_right_26_6 = comp_right * 64  # comp_right is in pixels
+        effective_advance_26_6 = max(pen_26_6, visual_right_26_6)
+        g_out = GlyphProps(
+            width=comp_w,
+            height=comp_h,
+            advance_x=(effective_advance_26_6 + 2) >> 2,  # 26.6 → 12.4 fixed-point
+            left=comp_left,
+            top=comp_top,
+            data_length=len(packed),
+            data_offset=total_size,
+            code_point=pua_cp,
+        )
+        total_size += len(packed)
+        return g_out, packed
+
+    # Bangla consonants: U+0995–U+09B9 plus nukta forms U+09DC–U+09DF
+    _CONSONANTS = list(range(0x0995, 0x09BA)) + [0x09DC, 0x09DD, 0x09DF]
+    _VIRAMA = 0x09CD
+
+    # Single-glyph IDs for each consonant (used to detect real substitutions)
+    _single_glyph = {c: _hb_shape([c])[0] for c in _CONSONANTS}
+
+    ft_primary = font_stack[0]  # primary face, already sized above
+    _pua_next = 0xE000
+    _ft_glyph_to_pua = {}      # ft glyph index → PUA codepoint (dedup identical shaped glyphs)
+    _composite_key_to_pua = {}  # tuple(glyph_ids) → PUA codepoint for composites
+
+    for _c1 in _CONSONANTS:
+        for _c2 in _CONSONANTS:
+            _shaped, _positions = _hb_shape_full([_c1, _VIRAMA, _c2])
+
+            if len(_shaped) == 1:
+                _ft_idx = _shaped[0]
+                if _ft_idx == _single_glyph.get(_c1, -1):
+                    continue  # no substitution — virama stays visible, skip
+                if _ft_idx not in _ft_glyph_to_pua:
+                    _pua_cp = _pua_next
+                    _ft_glyph_to_pua[_ft_idx] = _pua_cp
+                    _pua_next += 1
+                    g, packed = _render_ft_glyph_index(ft_primary, _ft_idx, _pua_cp)
+                    all_glyphs.append((g, packed))
+                else:
+                    _pua_cp = _ft_glyph_to_pua[_ft_idx]
+                bangla_cluster_entries.append((_c1, _VIRAMA, _c2, _pua_cp))
+
+            elif len(_shaped) == 2:
+                # Mark-positioning conjunct (ya-phala, repha, etc.) — composite into one bitmap.
+                _s0, _s1 = _shaped[0], _shaped[1]
+                # Skip if neither glyph changed from its standalone form (virama still visible).
+                if (_s0 == _single_glyph.get(_c1, -1) and
+                        _s1 == _single_glyph.get(_c2, -1)):
+                    continue
+                _comp_key = (_s0, _s1)
+                if _comp_key in _composite_key_to_pua:
+                    _pua_cp = _composite_key_to_pua[_comp_key]
+                else:
+                    _pua_cp = _pua_next
+                    g, packed = _render_composite_glyphs(ft_primary, _shaped, _positions, _pua_cp)
+                    if g is None:
+                        continue
+                    _composite_key_to_pua[_comp_key] = _pua_cp
+                    _pua_next += 1
+                    all_glyphs.append((g, packed))
+                bangla_cluster_entries.append((_c1, _VIRAMA, _c2, _pua_cp))
+
+    # Add the PUA interval to the intervals list so the glyph array is indexed correctly
+    if bangla_cluster_entries:
+        pua_min = 0xE000
+        pua_max = _pua_next - 1
+        intervals.append((pua_min, pua_max))
+        print(f"bangla: {len(bangla_cluster_entries)} conjunct entries, "
+              f"{len(_ft_glyph_to_pua) + len(_composite_key_to_pua)} unique PUA glyphs "
+              f"(U+{pua_min:04X}–U+{pua_max:04X})",
+              file=sys.stderr)
+
+    # Write bangla_clusters.h companion file
+    if args.bangla_clusters_out and bangla_cluster_entries:
+        with open(args.bangla_clusters_out, "w") as _cf:
+            _cf.write("// Auto-generated by fontconvert.py --bangla\n")
+            _cf.write("// Maps Bangla codepoint sequences to PUA glyph codepoints.\n")
+            _cf.write("// Key encoding: 3-cp: (cp1 << 42 | cp2 << 21 | cp3), 2-cp: (cp1 << 21 | cp2)\n")
+            _cf.write("#pragma once\n")
+            _cf.write("#include <stdint.h>\n\n")
+            _cf.write("struct BanglaCluster {\n")
+            _cf.write("    uint64_t key;\n")
+            _cf.write("    uint32_t puaCp;\n")
+            _cf.write("};\n\n")
+            _cf.write(f"static const BanglaCluster BANGLA_CLUSTERS[] = {{\n")
+            for _c1, _via, _c2, _pua in sorted(bangla_cluster_entries, key=lambda e: (e[0] << 42 | e[1] << 21 | e[2])):
+                _key = (_c1 << 42) | (_via << 21) | _c2
+                _cf.write(f"    {{ 0x{_key:016X}ULL, 0x{_pua:04X} }},  "
+                          f"// {chr(_c1)}্{chr(_c2)} → U+{_pua:04X}\n")
+            _cf.write("};\n\n")
+            _cf.write(f"static const uint16_t BANGLA_CLUSTER_COUNT = {len(bangla_cluster_entries)};\n")
+            _cf.write("\n// Pre-base matras — handled by BanglaShaper via order-swap, no PUA needed.\n")
+            _cf.write("// U+09BF ি : swap C+09BF → 09BF+C\n")
+            _cf.write("// U+09C7 ে : swap C+09C7 → 09C7+C\n")
+        print(f"bangla: wrote {args.bangla_clusters_out}", file=sys.stderr)
 
 # pipe seems to be a good heuristic for the "real" descender
 face = load_glyph(ord('|'))
@@ -823,12 +1146,14 @@ if compress:
         (0x0180, 0x024F),   # Latin Extended-B
         (0x0300, 0x036F),   # Combining Diacritical Marks
         (0x0400, 0x04FF),   # Cyrillic
+        (0x0980, 0x09FF),   # Bengali / Bangla
         (0x1EA0, 0x1EF9),   # Vietnamese Extended
         (0x2000, 0x206F),   # General Punctuation
         (0x2070, 0x209F),   # Superscripts & Subscripts
         (0x20A0, 0x20CF),   # Currency Symbols
         (0x2190, 0x21FF),   # Arrows
         (0x2200, 0x22FF),   # Math Operators
+        (0xE000, 0xF8FF),   # Private Use Area (Bangla PUA conjuncts)
         (0xFB00, 0xFB06),   # Alphabetic Presentation Forms (ligatures)
         (0xFFFD, 0xFFFD),   # Replacement Character
     ]

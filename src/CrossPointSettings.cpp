@@ -524,5 +524,32 @@ int CrossPointSettings::getReaderFontId() const {
           return BITTER_20_FONT_ID;
 #endif
       }
+#ifndef OMIT_BANGLA_FONT
+    case NOTOBENGALI:
+      switch (effectiveSize) {
+#ifndef OMIT_TINY_FONT
+        case TEENSY:
+        case TINY:
+          return NOTOBENGALI_10_FONT_ID;
+#endif
+#ifndef OMIT_SMALL_FONT
+        case SMALL:
+          return NOTOBENGALI_12_FONT_ID;
+#endif
+        case MEDIUM:
+        default:
+          return NOTOBENGALI_14_FONT_ID;
+        case LARGE:
+          return NOTOBENGALI_16_FONT_ID;
+#ifndef OMIT_XLARGE_FONT
+        case EXTRA_LARGE:
+          return NOTOBENGALI_18_FONT_ID;
+#endif
+#ifndef OMIT_HUGE_FONT
+        case HUGE_SIZE:
+          return NOTOBENGALI_20_FONT_ID;
+#endif
+      }
+#endif
   }
 }

@@ -188,6 +188,25 @@ EpdFont bitter20BoldItalicFont(&bitter_20_bolditalic);
 EpdFontFamily bitter20FontFamily(&bitter20RegularFont, &bitter20BoldFont, &bitter20ItalicFont, &bitter20BoldItalicFont);
 #endif
 
+#ifndef OMIT_BANGLA_FONT
+EpdFont notoBengali10RegularFont(&notobengali_10_regular);
+EpdFontFamily notoBengali10FontFamily(&notoBengali10RegularFont, nullptr, nullptr, nullptr);
+EpdFont notoBengali12RegularFont(&notobengali_12_regular);
+EpdFontFamily notoBengali12FontFamily(&notoBengali12RegularFont, nullptr, nullptr, nullptr);
+EpdFont notoBengali14RegularFont(&notobengali_14_regular);
+EpdFontFamily notoBengali14FontFamily(&notoBengali14RegularFont, nullptr, nullptr, nullptr);
+EpdFont notoBengali16RegularFont(&notobengali_16_regular);
+EpdFontFamily notoBengali16FontFamily(&notoBengali16RegularFont, nullptr, nullptr, nullptr);
+#ifndef OMIT_XLARGE_FONT
+EpdFont notoBengali18RegularFont(&notobengali_18_regular);
+EpdFontFamily notoBengali18FontFamily(&notoBengali18RegularFont, nullptr, nullptr, nullptr);
+#endif
+#ifndef OMIT_HUGE_FONT
+EpdFont notoBengali20RegularFont(&notobengali_20_regular);
+EpdFontFamily notoBengali20FontFamily(&notoBengali20RegularFont, nullptr, nullptr, nullptr);
+#endif
+#endif
+
 EpdFont smallFont(&inter_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
@@ -398,6 +417,18 @@ void setupDisplayAndFonts() {
 #endif
 #ifndef OMIT_HUGE_FONT
   renderer.insertFont(BITTER_20_FONT_ID, bitter20FontFamily);
+#endif
+#ifndef OMIT_BANGLA_FONT
+  renderer.insertFont(NOTOBENGALI_10_FONT_ID, notoBengali10FontFamily);
+  renderer.insertFont(NOTOBENGALI_12_FONT_ID, notoBengali12FontFamily);
+  renderer.insertFont(NOTOBENGALI_14_FONT_ID, notoBengali14FontFamily);
+  renderer.insertFont(NOTOBENGALI_16_FONT_ID, notoBengali16FontFamily);
+#ifndef OMIT_XLARGE_FONT
+  renderer.insertFont(NOTOBENGALI_18_FONT_ID, notoBengali18FontFamily);
+#endif
+#ifndef OMIT_HUGE_FONT
+  renderer.insertFont(NOTOBENGALI_20_FONT_ID, notoBengali20FontFamily);
+#endif
 #endif
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
