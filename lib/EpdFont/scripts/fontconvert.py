@@ -1183,6 +1183,17 @@ if compress:
     if group_count > 0:
         groups.append((group_start, group_count))
 
+    # Split any group with more than MAX_GROUP_GLYPHS glyphs so each chunk fits in ESP32-C3 heap
+    MAX_GROUP_GLYPHS = 200
+    split_groups = []
+    for (start, count) in groups:
+        if count > MAX_GROUP_GLYPHS:
+            for offset in range(0, count, MAX_GROUP_GLYPHS):
+                split_groups.append((start + offset, min(MAX_GROUP_GLYPHS, count - offset)))
+        else:
+            split_groups.append((start, count))
+    groups = split_groups
+
     # Compress each group
     compressed_groups = []  # list of (compressed_bytes, uncompressed_size, glyph_count, first_glyph_index)
     compressed_bitmap_data = []

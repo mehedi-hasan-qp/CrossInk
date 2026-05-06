@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Improve simple EPUB tables by buffering them into multi-column grid fragments instead of rendering each cell as an unrelated paragraph
 
 ### Fixed
+- Fix an `abort()` crash when opening Bangla EPUB content: the font decompressor now checks available contiguous heap before resizing the hot-group buffer, and the PUA conjunct group (770 glyphs, 135 KB) is split into ≤200-glyph sub-groups (~33 KB each) during font generation so each decompression fits comfortably in ESP32-C3 heap
 - Fix a crash when opening EPUB chapters that continue with normal text after a buffered table
 - Fix a crash when using `Go to %` in EPUBs by serializing the jump calculation with other reader cache access
 - Fix OTA update checks after the streaming release parser merge by keeping variant-aware firmware asset matching

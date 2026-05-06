@@ -170,6 +170,16 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     stats.cacheMisses++;
     const EpdFontGroup& group = fontData->groups[groupIndex];
 
+#ifdef MALLOC_CAP_8BIT
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < group.uncompressedSize) {
+      LOG_ERR("FDC", "Skip hot group %u: need %u bytes, largest free block too small",
+              groupIndex, group.uncompressedSize);
+      hotGroupFont = nullptr;
+      hotGroupIndex = UINT16_MAX;
+      stats.getBitmapTimeUs += micros() - tStart;
+      return nullptr;
+    }
+#endif
     hotGroup.resize(group.uncompressedSize);
     if (hotGroup.empty()) {
       LOG_ERR("FDC", "Failed to allocate %u bytes for hot group %u", group.uncompressedSize, groupIndex);
