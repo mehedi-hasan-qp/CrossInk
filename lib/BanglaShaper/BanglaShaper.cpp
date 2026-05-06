@@ -13,6 +13,16 @@ static constexpr uint32_t MATRA_PRE_E   = 0x09C7;  // ে
 // Hasanta / Virama — joins two consonants into a conjunct.
 static constexpr uint32_t VIRAMA = 0x09CD;
 
+// Two-part wrapping matras — split around base consonant: ে-prefix left, right-part right.
+static constexpr uint32_t MATRA_O      = 0x09CB;  // ো = ে (09C7) + া (09BE)
+static constexpr uint32_t MATRA_OI     = 0x09CC;  // ৌ = ে (09C7) + ৌ-right (09D7)
+static constexpr uint32_t MATRA_AA     = 0x09BE;  // া  (right part of ো)
+static constexpr uint32_t MATRA_AU_LEN = 0x09D7;  // ৌ-right (right part of ৌ)
+
+// Independent vowels used for আ→অ normalization before conjunct lookup.
+static constexpr uint32_t VOWEL_A  = 0x0985;  // অ
+static constexpr uint32_t VOWEL_AA = 0x0986;  // আ (= অ + া conceptually)
+
 static inline bool isBangla(uint32_t cp) {
     return cp >= BANGLA_START && cp <= BANGLA_END;
 }
@@ -128,6 +138,19 @@ size_t BanglaShaper::shape(const char* in, size_t inLen, char* out, size_t maxOu
             break;
         }
 
+        // Two-part wrapping matras: C + ো/ৌ → ে + C + right-part
+        // ো (09CB) = ে (pre-base, left) + া (09BE, right)
+        // ৌ (09CC) = ে (pre-base, left) + ৌ-right (09D7, right)
+        if (cp2 == MATRA_O || cp2 == MATRA_OI) {
+            uint32_t rightPart = (cp2 == MATRA_O) ? MATRA_AA : MATRA_AU_LEN;
+            if (dst + 9 <= dstEnd) {
+                dst += encodeUtf8(MATRA_PRE_E, dst);  // ে before consonant
+                dst += encodeUtf8(cp1, dst);           // base consonant
+                dst += encodeUtf8(rightPart, dst);     // া or ৌ-right after
+            }
+            continue;
+        }
+
         // Check for pre-base matra: C + ি/ে → reorder to ি/ে + C
         if (isPreBaseMatra(cp2)) {
             // Peek cp3 to make sure cp1 is a consonant-like codepoint, then reorder.
@@ -144,19 +167,40 @@ size_t BanglaShaper::shape(const char* in, size_t inLen, char* out, size_t maxOu
             uint32_t cp3 = decodeOne(&src, srcEnd);
 
             if (cp3 != 0xFFFFFFFF && isBangla(cp3)) {
-                uint32_t pua = lookupCluster(cp1, VIRAMA, cp3);
+                // Normalize আ (0x0986) → অ (0x0985) for conjunct lookup.
+                // আ decomposes conceptually to অ + া; if a PUA exists for অ্x, use it
+                // and append MATRA_AA as the implicit post-base vowel.
+                bool aaVowelNorm = (cp1 == VOWEL_AA);
+                uint32_t lookupCp1 = aaVowelNorm ? VOWEL_A : cp1;
+
+                uint32_t pua = lookupCluster(lookupCp1, VIRAMA, cp3);
                 if (pua != 0) {
-                    // Peek for a following pre-base matra (ি/ে) and reorder it before the PUA.
                     const char* cp4Start = src;
                     uint32_t cp4 = decodeOne(&src, srcEnd);
-                    if (cp4 != 0xFFFFFFFF && isPreBaseMatra(cp4)) {
-                        if (dst + 6 <= dstEnd) {
+
+                    bool cp4IsPreBase = (cp4 != 0xFFFFFFFF && isPreBaseMatra(cp4));
+                    bool cp4IsWrap    = (cp4 != 0xFFFFFFFF && (cp4 == MATRA_O || cp4 == MATRA_OI));
+
+                    if (cp4IsPreBase) {
+                        if (dst + 9 <= dstEnd) {
                             dst += encodeUtf8(cp4, dst);
                             dst += encodeUtf8(pua, dst);
+                            if (aaVowelNorm) dst += encodeUtf8(MATRA_AA, dst);
+                        }
+                    } else if (cp4IsWrap) {
+                        uint32_t rightPart = (cp4 == MATRA_O) ? MATRA_AA : MATRA_AU_LEN;
+                        int needed = aaVowelNorm ? 12 : 9;
+                        if (dst + needed <= dstEnd) {
+                            dst += encodeUtf8(MATRA_PRE_E, dst);
+                            dst += encodeUtf8(pua, dst);
+                            dst += encodeUtf8(rightPart, dst);
+                            if (aaVowelNorm) dst += encodeUtf8(MATRA_AA, dst);
                         }
                     } else {
-                        if (dst + 3 <= dstEnd) {
+                        int needed = aaVowelNorm ? 6 : 3;
+                        if (dst + needed <= dstEnd) {
                             dst += encodeUtf8(pua, dst);
+                            if (aaVowelNorm) dst += encodeUtf8(MATRA_AA, dst);
                         }
                         if (cp4 != 0xFFFFFFFF) src = cp4Start;
                     }

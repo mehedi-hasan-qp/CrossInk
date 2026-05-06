@@ -631,7 +631,7 @@ if args.bangla:
         return g_out, packed
 
     # Bangla consonants: U+0995–U+09B9 plus nukta forms U+09DC–U+09DF
-    _CONSONANTS = list(range(0x0995, 0x09BA)) + [0x09DC, 0x09DD, 0x09DF]
+    _CONSONANTS = [0x0985] + list(range(0x0995, 0x09BA)) + [0x09DC, 0x09DD, 0x09DF]
     _VIRAMA = 0x09CD
 
     # Single-glyph IDs for each consonant (used to detect real substitutions)
