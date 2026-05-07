@@ -331,6 +331,7 @@ float CrossPointSettings::getReaderLineCompression() const {
         case WIDE:
           return 1.2f;
       }
+#ifndef OMIT_CHAREIN_FONT
     case CHAREINK:
       switch (lineSpacing) {
         case TIGHT:
@@ -341,6 +342,7 @@ float CrossPointSettings::getReaderLineCompression() const {
         case WIDE:
           return 1.3f;
       }
+#endif
     case BITTER:
       switch (lineSpacing) {
         case TIGHT:
@@ -468,6 +470,7 @@ int CrossPointSettings::getReaderFontId() const {
           return LEXENDDECA_20_FONT_ID;
 #endif
       }
+#ifndef OMIT_CHAREIN_FONT
     case CHAREINK:
       switch (effectiveSize) {
 #ifndef OMIT_TEENSY_FONT
@@ -496,6 +499,7 @@ int CrossPointSettings::getReaderFontId() const {
           return CHAREINK_20_FONT_ID;
 #endif
       }
+#endif  // OMIT_CHAREIN_FONT
     case BITTER:
       switch (effectiveSize) {
 #ifndef OMIT_TEENSY_FONT

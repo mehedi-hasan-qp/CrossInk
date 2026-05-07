@@ -23,6 +23,14 @@ Keep this file focused on repo-specific gotchas that are worth reusing in future
 - Kindle EPUBs may contain paired high-res and old-Kindle fallback images. `ChapterHtmlSlimParser` should skip `<img>` nodes with `data-AmznRemoved-M8` to avoid duplicate stacked images.
 - After image/layout pipeline changes that affect cached EPUB output, clear the affected `.crosspoint/epub_<hash>/` cache if behavior looks stale.
 
+## Settings System — SettingInfo::Enum
+
+`SettingInfo::Enum` stores the raw `uint8_t` field value as the **index** into the `enumValues` vector. Cycling: `(value + 1) % enumValues.size()`. Display: `enumValues[value]` with `value < size ? value : 0` bounds guard.
+
+**Critical invariant**: the order of entries in `enumValues` must match the corresponding `enum` integer values exactly. Removing a middle entry shifts all following entries' indices down by 1, corrupting stored settings for any enum value that was after the removed entry. Example: removing `CHAREINK` (index 2) from the font picker made value 2 display as "Noto Bengali" and made `NOTOBENGALI` (value 3) unreachable and display as "LexendDeca".
+
+**Rule**: never remove an enum value from an `SettingInfo::Enum` values list mid-sequence, even for compile-time flag exclusions. Keep the entry so indices stay in sync with enum integer values.
+
 ## Misc Repo Gotchas
 
 - POSIX TZ signs are inverted from ISO 8601 in `TimeStore::applyTimezone()`: `"UTC-1"` means UTC+1.

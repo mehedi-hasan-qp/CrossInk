@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Clean up EPUB table rendering by removing synthetic row/cell labels and defaulting table cells to readable left alignment
 - Improve simple EPUB tables by buffering them into multi-column grid fragments instead of rendering each cell as an unrelated paragraph
 
+### Changed
+- `env:bangla` build now omits CharEInK and 10px (Tiny) font variants via `OMIT_CHAREIN_FONT` and `OMIT_TINY_FONT` flags to fit the enlarged Bangla glyph tables within the 6.25 MB flash limit; the `CHAREINK` enum value is preserved so stored settings are not corrupted
+
 ### Fixed
 - Fix ো (U+09CB) and ৌ (U+09CC) matras not wrapping their base consonant: the runtime BanglaShaper now decomposes each into its pre-base ে prefix (rendered left of the consonant) and post-base suffix (rendered right), using the canonical Unicode decompositions ো→ে+া and ৌ→ে+ৌ-right (U+09D7)
 - Fix অ্যা not rendering correctly: added অ (U+0985) to the build-time consonant list so HarfBuzz generates a PUA glyph for অ্য and similar conjuncts; the runtime shaper also handles the alternate আ (U+0986)+্+C encoding by normalising আ→অ and appending the implicit আকার (া) vowel sign

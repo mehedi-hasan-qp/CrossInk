@@ -20,5 +20,8 @@ public:
 
 private:
     static uint32_t lookupCluster(uint32_t cp1, uint32_t cp2, uint32_t cp3);
+    // 5-cp variant: C1 + VIRAMA + C2 + VIRAMA + C3 → PUA.
+    // cp2/cp4=VIRAMA are implicit; key has bit 63 set to distinguish from 3-cp keys.
+    static uint32_t lookupCluster5(uint32_t cp1, uint32_t cp3, uint32_t cp5);
     static int encodeUtf8(uint32_t cp, char* out);
 };

@@ -13,6 +13,7 @@
 //   OMIT_SMALL_FONT  - excludes 12px (Small) reading fonts
 //   OMIT_XLARGE_FONT - excludes 18px (Extra Large) reading fonts; used by env:tiny
 //   OMIT_HUGE_FONT   - excludes 20px (Huge) reading fonts; used by all firmware envs except env:xlarge
+//   OMIT_CHAREIN_FONT - excludes all CharEInK fonts; used by env:bangla to fit Bangla glyphs in flash
 #ifdef OMIT_EMOJI_FONTS
 #define BUILTIN_READING_FONT_HEADER(name) <builtinFonts/noemoji/name.h>
 #elif defined(OMIT_PHM)
@@ -60,6 +61,7 @@
 #include BUILTIN_READING_FONT_HEADER(bitter_20_regular)
 #endif
 
+#ifndef OMIT_CHAREIN_FONT
 #ifndef OMIT_TEENSY_FONT
 #include BUILTIN_READING_FONT_HEADER(charein_8_bold)
 #include BUILTIN_READING_FONT_HEADER(charein_8_bolditalic)
@@ -98,6 +100,7 @@
 #include BUILTIN_READING_FONT_HEADER(charein_20_italic)
 #include BUILTIN_READING_FONT_HEADER(charein_20_regular)
 #endif
+#endif  // OMIT_CHAREIN_FONT
 
 #ifndef OMIT_TEENSY_FONT
 #include BUILTIN_READING_FONT_HEADER(lexenddeca_8_bold)

@@ -94,6 +94,18 @@ uint32_t BanglaShaper::lookupCluster(uint32_t cp1, uint32_t cp2, uint32_t cp3) {
     return 0;
 }
 
+uint32_t BanglaShaper::lookupCluster5(uint32_t cp1, uint32_t cp3, uint32_t cp5) {
+    uint64_t key = (1ULL << 63) | ((uint64_t)cp1 << 42) | ((uint64_t)cp3 << 21) | cp5;
+    int lo = 0, hi = (int)BANGLA_CLUSTER_COUNT - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (BANGLA_CLUSTERS[mid].key == key) return BANGLA_CLUSTERS[mid].puaCp;
+        if (BANGLA_CLUSTERS[mid].key < key) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return 0;
+}
+
 bool BanglaShaper::containsBangla(const char* utf8) {
     if (!utf8) return false;
     const char* p = utf8;
@@ -172,6 +184,50 @@ size_t BanglaShaper::shape(const char* in, size_t inLen, char* out, size_t maxOu
                 // and append MATRA_AA as the implicit post-base vowel.
                 bool aaVowelNorm = (cp1 == VOWEL_AA);
                 uint32_t lookupCp1 = aaVowelNorm ? VOWEL_A : cp1;
+
+                // Try 5-cp match first: C1 + VIRAMA + C2 + VIRAMA + C3
+                {
+                    const char* peek4 = src;
+                    uint32_t cp4peek = decodeOne(&src, srcEnd);
+                    if (cp4peek == VIRAMA) {
+                        const char* peek5 = src;
+                        uint32_t cp5peek = decodeOne(&src, srcEnd);
+                        if (cp5peek != 0xFFFFFFFF && isBangla(cp5peek)) {
+                            uint32_t pua5 = lookupCluster5(lookupCp1, cp3, cp5peek);
+                            if (pua5 != 0) {
+                                const char* cp6Start = src;
+                                uint32_t cp6 = decodeOne(&src, srcEnd);
+                                bool cp6IsPreBase = (cp6 != 0xFFFFFFFF && isPreBaseMatra(cp6));
+                                bool cp6IsWrap    = (cp6 != 0xFFFFFFFF && (cp6 == MATRA_O || cp6 == MATRA_OI));
+                                if (cp6IsPreBase) {
+                                    if (dst + 9 <= dstEnd) {
+                                        dst += encodeUtf8(cp6, dst);
+                                        dst += encodeUtf8(pua5, dst);
+                                        if (aaVowelNorm) dst += encodeUtf8(MATRA_AA, dst);
+                                    }
+                                } else if (cp6IsWrap) {
+                                    uint32_t rightPart = (cp6 == MATRA_O) ? MATRA_AA : MATRA_AU_LEN;
+                                    int needed = aaVowelNorm ? 12 : 9;
+                                    if (dst + needed <= dstEnd) {
+                                        dst += encodeUtf8(MATRA_PRE_E, dst);
+                                        dst += encodeUtf8(pua5, dst);
+                                        dst += encodeUtf8(rightPart, dst);
+                                        if (aaVowelNorm) dst += encodeUtf8(MATRA_AA, dst);
+                                    }
+                                } else {
+                                    int needed = aaVowelNorm ? 6 : 3;
+                                    if (dst + needed <= dstEnd) {
+                                        dst += encodeUtf8(pua5, dst);
+                                        if (aaVowelNorm) dst += encodeUtf8(MATRA_AA, dst);
+                                    }
+                                    if (cp6 != 0xFFFFFFFF) src = cp6Start;
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                    src = peek4;  // no 5-cp match — restore for 3-cp path
+                }
 
                 uint32_t pua = lookupCluster(lookupCp1, VIRAMA, cp3);
                 if (pua != 0) {

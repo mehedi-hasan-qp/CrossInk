@@ -242,6 +242,7 @@ for size in ${BENGALI_SIZES[@]}; do
   output_path="../builtinFonts/${font_name}.h"
   ../../../.font-tools-venv/bin/python3 fontconvert.py "$font_name" "$size" "$BENGALI_FONT" \
     --additional-intervals 0x0980,0x09FF \
+    --additional-intervals 0x0964,0x0965 \
     --bangla \
     --bangla-clusters-out "$BENGALI_CLUSTERS_OUT" \
     "${BENGALI_RENDER_ARGS[@]}" > "$output_path"

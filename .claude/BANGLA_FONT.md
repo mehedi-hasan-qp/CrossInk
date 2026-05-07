@@ -70,6 +70,10 @@ the text enters the render pipeline. Integrates in `ParsedText::addWord()` and `
 | B6 | Update `convert-builtin-fonts.sh` to pass `--bangla` flag | `convert-builtin-fonts.sh` | ✅ |
 | B7 | Regenerate font headers with shaped glyphs | `lib/EpdFont/builtinFonts/notobengali_*.h` | ✅ 6 headers, PUA U+E000–U+E0C6 |
 | B8 | Regenerate `fontIds.h` (hashes change with new glyphs) | `src/fontIds.h` | ✅ |
+| B9 | Add 3-consonant shaping loop + 5-cp key format to `fontconvert.py` | `lib/EpdFont/scripts/fontconvert.py` | ✅ 4183 new 3-cp entries, PUA U+E000–U+F35E |
+| B10 | Add U+0964–U+0965 (Danda/Double Danda) to `convert-builtin-fonts.sh` | `lib/EpdFont/scripts/convert-builtin-fonts.sh` | ✅ |
+| B11 | Regenerate headers with Danda + 3-consonant glyphs | `lib/EpdFont/builtinFonts/notobengali_*.h` | ✅ 4967 conjuncts total |
+| B12 | Regenerate `fontIds.h` | `src/fontIds.h` | ✅ |
 
 ---
 
@@ -82,12 +86,52 @@ the text enters the render pipeline. Integrates in `ParsedText::addWord()` and `
 | C3 | Integrate shaper in `ParsedText::addWord()` | `lib/Epub/Epub/ParsedText.cpp` | ✅ |
 | C4 | Integrate shaper in plain-text pipeline | `src/activities/reader/TxtReaderActivity.cpp` | ✅ in parseAndWrapLines |
 | C5 | Final end-to-end test with a Bangla EPUB in simulator | — | ✅ ya-phala, conjuncts, digits all correct |
+| C6 | Add `lookupCluster5()` + 5-cp lookahead in `BanglaShaper::shape()` | `lib/BanglaShaper/BanglaShaper.cpp`, `.h` | ✅ |
+
+---
+
+---
+
+## Phase D — Flash Optimization (env:bangla)
+
+After adding 4,183 three-consonant cluster glyphs (B9), the bangla build overflowed flash by ~1 MB.
+
+**Solution**: Added `OMIT_CHAREIN_FONT` and `OMIT_TINY_FONT` compile flags to `[env:bangla]` in `platformio.ini`. Together they save ~1.3 MB. Flash now at **95.9%** (6,284,241 / 6,553,600 bytes).
+
+### Files changed
+| File | Change |
+|------|--------|
+| `lib/EpdFont/builtinFonts/all.h` | Outer `#ifndef OMIT_CHAREIN_FONT` guard wrapping all charein_* includes (lines 63–101) |
+| `src/main.cpp` | Outer `OMIT_CHAREIN_FONT` guard around charein EpdFont/EpdFontFamily declarations and `renderer.insertFont` calls |
+| `src/CrossPointSettings.cpp` | `case CHAREINK:` in `getReaderFontId()` and `getReaderLineCompression()` wrapped in `#ifndef OMIT_CHAREIN_FONT`; falls to `default:` (LEXENDDECA) when omitted |
+| `platformio.ini` | `-DOMIT_CHAREIN_FONT -DOMIT_TINY_FONT` added to `[env:bangla]` |
+
+### Critical lesson: do NOT change SettingsList.h
+The original plan included wrapping `STR_CHAREINK` in `SettingsList.h` with `#ifndef OMIT_CHAREIN_FONT`. **This breaks Bangla rendering completely.** `SettingInfo::Enum` uses the vector index as the stored `uint8_t` value. Removing CHAREINK (index 2) shifts NOTOBENGALI from index 3 to index 2 — selecting "Noto Bengali" stores value 2 (= CHAREINK), which then falls to LexendDeca in `getReaderFontId()`. **Keep `STR_CHAREINK` in the list at index 2 always.**
 
 ---
 
 ## Known Issues
 
 ### ~~BUG-1: Ya-phala composite glyph renders over base consonant~~ ✅ FIXED
+
+### ~~BUG-2: U+0964 (।, Devanagari Danda) invisible~~ ✅ FIXED
+
+**Root cause**: `--additional-intervals 0x0980,0x09FF` in `convert-builtin-fonts.sh` covers only the Bengali block. U+0964 (।) is in the Devanagari block (U+0900–U+097F) and was never included.
+
+**Fix**: Added `--additional-intervals 0x0964,0x0965` to `convert-builtin-fonts.sh` (line ~245). Regenerated all 6 font headers.
+
+### ~~BUG-3: 3-consonant conjuncts (ন্ত্র, স্ত্র, etc.) render broken~~ ✅ FIXED
+
+**Root cause (two layers)**:
+1. **Build-time** (`fontconvert.py`): Only a 2-consonant loop existed. No bitmaps were ever generated for C1+্+C2+্+C3 sequences.
+2. **Runtime** (`BanglaShaper.cpp`): After emitting PUA(C1C2), the remaining ্+C3 was processed as a standalone virama followed by a loose consonant → visible ্ + floating C3.
+
+**Fix**:
+- `fontconvert.py`: Added 3-consonant loop (O(n³) over ~41 consonants). Key encoding: `(1ULL<<63) | (cp1<<42) | (cp3<<21) | cp5` (bit-63 flag distinguishes 5-cp keys from existing 3-cp keys, which are always < 2⁵⁴).
+- `BanglaShaper.cpp/h`: Added `lookupCluster5()` + 5-cp lookahead in `shape()`. 5-cp path is tried first; falls back to 3-cp path if no match.
+
+**Result**: 4,183 new 3-consonant cluster entries, total 4,967 conjuncts, PUA U+E000–U+F35E.
 
 **Root cause**: `fontconvert.py` line 497 set `_hb_font.scale = (args.size * 64, args.size * 64)`
 — treating size as pixels at 72 DPI. FreeType renders at 150 DPI, so actual pixel size is

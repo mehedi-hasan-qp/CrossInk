@@ -44,6 +44,7 @@ EpdFont lexenddeca14ItalicFont(&lexenddeca_14_italic);
 EpdFont lexenddeca14BoldItalicFont(&lexenddeca_14_bolditalic);
 EpdFontFamily lexenddeca14FontFamily(&lexenddeca14RegularFont, &lexenddeca14BoldFont, &lexenddeca14ItalicFont,
                                      &lexenddeca14BoldItalicFont);
+#ifndef OMIT_CHAREIN_FONT
 #ifndef OMIT_TEENSY_FONT
 EpdFont charein8RegularFont(&charein_8_regular);
 EpdFont charein8BoldFont(&charein_8_bold);
@@ -95,6 +96,7 @@ EpdFont charein20BoldItalicFont(&charein_20_bolditalic);
 EpdFontFamily charein20FontFamily(&charein20RegularFont, &charein20BoldFont, &charein20ItalicFont,
                                   &charein20BoldItalicFont);
 #endif
+#endif  // OMIT_CHAREIN_FONT
 #ifndef OMIT_TEENSY_FONT
 EpdFont lexenddeca8RegularFont(&lexenddeca_8_regular);
 EpdFont lexenddeca8BoldFont(&lexenddeca_8_bold);
@@ -365,6 +367,7 @@ void setupDisplayAndFonts() {
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
 
+#ifndef OMIT_CHAREIN_FONT
 #ifndef OMIT_TEENSY_FONT
   renderer.insertFont(CHAREINK_8_FONT_ID, charein8FontFamily);
 #endif
@@ -382,6 +385,7 @@ void setupDisplayAndFonts() {
 #ifndef OMIT_HUGE_FONT
   renderer.insertFont(CHAREINK_20_FONT_ID, charein20FontFamily);
 #endif
+#endif  // OMIT_CHAREIN_FONT
 
 #ifndef OMIT_TEENSY_FONT
   renderer.insertFont(LEXENDDECA_8_FONT_ID, lexenddeca8FontFamily);
