@@ -64,6 +64,31 @@ cmd_launch() {
   sleep 2
   osascript -e "tell application \"System Events\" to tell process \"$PROC_NAME\" to perform action \"AXRaise\" of window 1" \
     || { echo "error: simulator window not found — check $LOG" >&2; exit 1; }
+  wait_frontmost
+}
+
+# AXRaise can trigger a macOS Space-switch animation if the simulator
+# window lives on a different virtual desktop than the active one.
+# screencapture fired mid-transition can grab Mission Control's view of
+# an unrelated desktop instead of the simulator. Never screenshot
+# without confirming "program" is actually frontmost first.
+frontmost_proc() {
+  osascript -e 'tell application "System Events" to name of first process whose frontmost is true' 2>/dev/null
+}
+
+wait_frontmost() {
+  local tries=0
+  while [ "$(frontmost_proc)" != "$PROC_NAME" ]; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 20 ]; then
+      echo "error: \"$PROC_NAME\" never became frontmost (still: $(frontmost_proc)) — Space switch may be stuck; bring the simulator window to your active desktop manually" >&2
+      return 1
+    fi
+    sleep 0.3
+  done
+  # Extra settle time past the frontmost flag flip — the Space-switch
+  # animation itself can still be finishing for a few frames after.
+  sleep 0.5
 }
 
 cmd_bounds() {
@@ -80,6 +105,7 @@ EOF
 
 cmd_shot() {
   local out="${1:?usage: driver.sh shot <path.png>}"
+  wait_frontmost || exit 1
   local b; b="$(cmd_bounds)"
   screencapture -R"$b" -x "$out"
 }
@@ -97,6 +123,7 @@ cmd_key() {
     power)   code=35 ;;   # "P" -> BTN_POWER
     *) echo "unknown key: $name" >&2; exit 1 ;;
   esac
+  wait_frontmost || exit 1
   osascript -e "tell application \"System Events\" to tell process \"$PROC_NAME\" to key code $code"
   sleep 0.5
 }
